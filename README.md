@@ -1,6 +1,6 @@
 # caddy-openapi
 
-This middleware validates HTTP request and response against a OpenAPI V3 Specification file
+This is a fork from https://github.com/chukmunnlee/caddy-openapi.  This middleware validates HTTP request and response against a OpenAPI V3 Specification file
 
 ## Installation
 
@@ -9,7 +9,7 @@ Build caddy with caddy-openapi, run `make`. This will build for Linux, Windows a
 You can also build with `xcaddy`
 ```
 xcaddy build \
-    --with github.com/chukmunnlee/caddy-openapi
+    --with georgepadayatti/caddy-openapi
 ```
 
 Tested with `go version go1.17.1 linux/amd64`.
@@ -62,103 +62,3 @@ Errors are reported in the following 2 [placeholder](https://caddyserver.com/doc
 
 
 Reports any errors as a `{openapi.error}` 
-
-## Example
-
-The following example validates all request, including query string as well as payloads, to `localhost:8080/api` 
-against the `./examples/customer/customer.yaml` file.  Any non compliant request will be logged to Caddy's console. 
-Respond to the client with the error `{openapi.error}`.
-
-```
-:8080 {
-
-  @api {
-    path /api/*
-  }
-
-  reverse_proxy @api {
-    to localhost:3000
-  }
-
-  route @api {
-    openapi {
-      spec ./examples/customer/customer.yaml 
-      policy_bundle ./examples/policy/bundle.tar.gz
-      check {
-        req_body 
-        resp_body 
-      }
-      validate_servers
-      log_error 
-    }
-  }
-
-  handle_errors {
-    respond @api "Resource: {http.request.orig_uri}. Error: {openapi.error}" {openapi.status_code}  {
-      close
-    }
-  }
-}
-```
-
-Try out the `customer.yaml` API by running the accompanying node application.
-
-## Using OpenPolicyAgent
-
-You can enforce policies on routes by adding the `x-policy` field to either the [OpenAPI3 document](https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.1.0.md#schema) level, or the [path item](https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.1.0.md#pathItemObject) level or or the [operation](https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.1.0.md#operationObject) level. 
-
-If a `x-policy` field is added at the
-- *OpenAPI3 document* then the policy will be applied to all path
-- *Path item* then the policy will be applied to all methods specified for that path eg `POST`, `GET` to `/api/v1/customer`
-- *Operation* then the policy will only be applied to that operation eg. `GET/api/v1/customer`
-`x-policy` attribute nested deeper into the 
-
-The 'deeper' a `x-policy` field, the higher its precedence. Since `policy_bundle` is optional, no `x-policy` will be evaluated if no bundle are loaded.
-
-Assume the following OPA policy file
-```
-package authz
-
-default allow = false
-
-allow {
-  lower(input.method) = "get"
-  array.slice(input.path, 0, 2) = [ "api", "customer" ]
-  to_number(input.pathParams.custId) >= 100
-}
-```
-has been bundled as `bundle.tar.gz`. Load it with `policy_bundle`
-
-The following OpenAPI3 fragment show how you can evaluate `authz.allow` on all `GET /api/customer/`
-```
-paths:
-  /api/customer/{custId}:
-    get:
-      description: Get customer
-      operationId: getCustomer
-      x-policy: authz.allow
-      parameters:
-      - name: custId
-        in: path
-        required: true
-        schema:
-           type: number
-```
-
-The HTTP request are converted into `input` according to the following table
-
-| Fields                   | Description |
-|--------------------------|-------------|
-| `input.scheme`           | HTTP or HTTPS |
-| `input.host`             | Host and port number |
-| `input.method`           | HTTP method  |
-| `input.path`             | Array of path elements eg. `/api/customer/123` is converted to `[ 'api', 'customer', '123' ]` |
-| `input.remoteAddr`       | Host and port number of the client |
-| `input.queryString`      | If a query string is present, the query string will be destructed into a map under `queryString` root. Example `?offset=10&limit=10` will be converted to the following keys: `input.queryString.offset` and `input.queryString.limit`. Query parameters with multiple value will have an array as its value. `queryString` will not be present if the request do not contain any query params |
-| `input.pathParams`       | Like query string but a map of matched path parameters from the OpenAPI3 spec where parameter type is `in: path`. See above example |
-| `input.headers`          | Map of all the request headers |
-| `input.body`             | Access to the request's body. Only supports `application/json` content type. **Not implemented yet** |
-
-Assume all values are string
-
-This plugin currently can only work with policies/rules that return true or false.

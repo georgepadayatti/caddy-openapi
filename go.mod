@@ -1,4 +1,4 @@
-module github.com/chukmunnlee/caddy-openapi
+module georgepadayatti/caddy-openapi
 
 go 1.17
 
